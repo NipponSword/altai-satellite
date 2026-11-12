@@ -1,0 +1,17 @@
+# SPDX-FileCopyrightText: 2026 DESY and the Constellation authors
+# SPDX-License-Identifier: CC0-1.0
+
+default: true
+line-length: false
+blanks-around-headings: false
+link-fragments: false
+
+no-multiple-blanks:
+  maximum: 2
+
+blanks-around:
+  lines_above: 1
+
+table-column-style:
+  style: compact
+  aligned_delimiter: true
