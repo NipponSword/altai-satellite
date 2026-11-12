@@ -9,7 +9,7 @@ build-backend = "setuptools.build_meta"
 name = "altaiSatellite"
 dynamic = ["version"]
 authors = [{name = "Constellation Authors"}]
-description = "altai Satellite for Constellation"
+description = "ALTAI Satellite for Constellation"
 readme = "README.md"
 license = {text = "EUPL-1.2"}
 classifiers = [
@@ -31,10 +31,10 @@ dependencies = [
 ]
 
 [project.scripts]
-Satellitealtai = "altai.__main__:main"
+SatelliteAltai = "altai_satellite.__main__:main"
 
 [project.entry-points."constellation.satellites"]
-altai = "altai"
+altai_satellite = "altai_satellite"
 
 [project.urls]
 Homepage = "TODO"

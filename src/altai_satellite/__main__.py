@@ -6,7 +6,7 @@ SPDX-License-Identifier: EUPL-1.2
 from constellation.core.logging import setup_cli_logging
 from constellation.core.satellite import SatelliteArgumentParser
 
-from .altai import altai
+from .altai import Altai
 
 
 def main(args=None):

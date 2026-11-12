@@ -1,0 +1,218 @@
+"""
+SPDX-FileCopyrightText: 2025 DESY and the Constellation authors
+SPDX-License-Identifier: EUPL-1.2
+"""
+
+from constellation.core.satellite import Satellite
+
+from . import __version__
+from datetime import datetime
+from time import sleep
+import alpidedaqboard
+import subprocess
+
+class Altai(Satellite, version=__version__):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.daq=None
+        self.is_running=False
+        self.triggermode=None
+        self.idev=0
+        self.isev=0
+
+    def do_initialize(self):
+        conf=self.GetInitConfiguration().as_dict()
+        self.daq=alpidedaqboard.ALPIDEDAQBoard(conf['serial'])
+        self.plane=int(conf['plane'])
+        self.triggermode=conf['triggermode']
+        if self.triggermode not in ['primary','replica']:
+            raise ValueError('need to specify trigger mode to be either "primary" or "replica"')
+        self.stoptrigger()
+
+    def do_configure(self):        
+        self.idev=0
+        self.isev=0
+        self.stoptrigger()
+
+        self.daq.power_on()
+
+        # just in case we got up on the wrong side of the fw...
+        self.daq.trg.opcode.write(0x55)
+        self.daq.rdoctrl.rst.issue()
+        self.daq.rdopar.rst.issue()
+        self.daq.evtpkr.rst.issue()
+        self.daq.evtbld.rst.issue()
+        self.daq.trg.rstrdobsy.issue()
+        self.daq.purge_events()
+        self.daq.xonxoff.rst.issue()
+        
+        # now for monitoring, also start clean
+        self.daq.rdopar.clr.issue()
+        self.daq.trgmon.clr.issue()
+
+        # ...or the ALPIDE...
+        self.daq.alpide_cmd_issue(0xD2) # GRST
+
+        # now for monitoring, also start clean
+        self.daq.rdopar.clr.issue()
+        self.daq.trgmon.clr.issue()
+
+        conf=self.GetConfiguration().as_dict()
+        self.chipid=int(conf['CHIPID']) if 'CHIPID' in conf else 0x10
+        if 'VCASN'   in conf: self.daq.alpide_reg_write(0x604,int(conf['VCASN' ]),chipid=self.chipid)
+        if 'VCASN2'  in conf: self.daq.alpide_reg_write(0x607,int(conf['VCASN2']),chipid=self.chipid)
+        if 'ITHR'    in conf: self.daq.alpide_reg_write(0x60E,int(conf['ITHR'  ]),chipid=self.chipid)
+        if 'VCLIP'   in conf: self.daq.alpide_reg_write(0x608,int(conf['VCLIP' ]),chipid=self.chipid)
+        if 'IDB'     in conf: self.daq.alpide_reg_write(0x60C,int(conf['IDB'   ]),chipid=self.chipid)
+        self.daq.alpide_reg_write(0x602,int(conf['VRESETD']) if 'VRESETD' in conf else 147,chipid=self.chipid)
+        
+        self.strblen=int(conf['STROBE_LENGTH'])
+        self.rdomode=conf['RDOMODE'] if 'RDOMODE' in conf else 'DATAPORT'
+
+        self.daq.alpide_cmd_issue(0xE4) # PRST
+        self.daq.alpide_reg_write(0x0004,0x0060      ,chipid=self.chipid) # disable busy monitoring, analog test pulse, enable test strobe
+        self.daq.alpide_reg_write(0x0005,self.strblen,chipid=self.chipid) # strobe length
+        self.daq.alpide_reg_write(0x0010,0x0030      ,chipid=self.chipid) # initial token, SDR, disable manchester, previous token == self!!!
+        self.daq.alpide_cmd_issue(0x63) # RORST (needed!!!)
+
+        if self.rdomode=='DCTRL':
+            self.daq.alpide_reg_write(0x0001,0x020D,chipid=self.chipid) # normal readout, TRG mode, CMU RDO
+            self.daq.rdoctrl.delay_set.write(2*self.strblen+100) # when to start reading (@80MHz, i.e. at least strobe-time x2 + sth.) ... TODO
+            self.daq.rdoctrl.chipid.write(self.chipid)
+            self.daq.rdoctrl.ctrl.write(1) # enable DCTRL RDO
+            self.daq.rdomux.ctrl.write(2) # select DCTRL RDO
+        elif self.rdomode=='DATAPORT':
+            self.daq.alpide_reg_write(0x0001,0x000D,chipid=self.chipid) # normal readout, TRG mode
+            self.daq.rdopar.ctrl.write(1) # enable parallel port RDO
+            self.daq.rdomux.ctrl.write(1) # select parallel port RDO
+            self.daq.xonxoff.ctrl.write(1) # enable XON XOFF
+        else:
+            raise ValueError('RDOMODE "%s" not understood'%self.rdomode)
+
+        self.daq.trg.minspacing.write(int(conf['minspacing']) if 'minspacing' in conf else 0)
+        self.daq.trg.fixedbusy .write(int(conf['fixedbusy' ]) if 'fixedbusy'  in conf else 0)
+
+    def DoStartRun(self):
+        self.idev=0
+        self.isev=0
+        self.send_status_event(datetime.now(),bore=True)
+        self.isev+=1
+        self.armtrigger()
+        self.is_running=True
+        
+    def DoStopRun(self):
+        self.stoptrigger()
+        self.is_running=False
+
+    def DoReset(self):
+        self.stoptrigger()
+        self.is_running=False
+        # TODO: cleanup!?
+
+    def DoStatus(self):
+        self.SetStatusTag('StatusEventN','%d'%self.isev)
+        self.SetStatusTag('DataEventN'  ,'%d'%self.idev)
+
+    def RunLoop(self):
+        # status events: roughly every 10s (time checked at least every 1000 events or at receive timeout)
+        tlast=datetime.now()
+        ilast=0
+        while self.is_running:
+            checkstatus=False
+            if not self.read_and_send_event():
+                checkstatus=True
+            if (self.idev-ilast)%1000==0:
+                checkstatus=True
+            if checkstatus:
+                if (datetime.now()-tlast).total_seconds()>=10:
+                    tlast=datetime.now()
+                    ilast=self.idev
+                    self.send_status_event(tlast)
+                    self.isev+=1
+        self.send_status_event(datetime.now())
+        self.isev+=1
+        while self.read_and_send_event(): # try to get anything remaining
+            pyeudaq.EUDAQ_INFO("Reading remaining events...")
+        self.send_status_event(datetime.now(),eore=True)
+        self.isev+=1
+
+    def armtrigger(self):
+        if self.triggermode=='primary':
+            self.daq.trg.ctrl.write(0b1000) # primary mode, no maskig of external trigger or busy, no forced busy (anymore)
+            # TODO: needs to go out:
+            self.daq.trgseq.dt_set.write(8000) # 10 kHz
+            self.daq.trgseq.ntrg_set.write(300)
+        elif self.triggermode=='replica':
+            self.daq.trg.ctrl.write(0b0000) # replica mode, no masking, no forced busy (anymore)
+
+    def stoptrigger(self):
+        if self.triggermode=='primary':
+            self.daq.trg.ctrl.write(0b1001) # primary mode, no maskig of external trigger or busy, force busy
+            # TODO: needs to go out:
+            self.daq.trgseq.stop.issue() 
+        elif self.triggermode=='replica':
+            self.daq.trg.ctrl.write(0b0001) # replica mode, no masking, force busy
+       
+    def send_status_event(self,time,bore=False,eore=False):
+        ev=pyeudaq.Event('RawEvent',self.name+'_status')
+        idda,iddd,status=self.daq.power_status()
+        temp=self.daq.carrier_temp()
+        ev.SetTag('IDDA','%.2f mA'%idda)
+        ev.SetTag('IDDD','%.2f mA'%iddd)
+        ev.SetTag('Temperature','%.2f C'%temp if temp else 'Invalid temperature read!')
+        ev.SetTag('Event','%d'%self.idev)
+        ev.SetTag('Time',time.isoformat())
+        if bore:
+            ev.SetBORE()
+            ev.SetTag('FPGA_GIT'    ,self.daq.get_fpga_git())
+            ev.SetTag('FPGA_COMPILE',self.daq.get_fpga_tcompile().isoformat())
+            #ev.SetTag('FX3_GIT'     ,self.daq.get_fx3_git())
+            #ev.SetTag('FX3_COMPILE' ,self.daq.get_fx3_tcompile().isoformat())
+            git =subprocess.check_output(['git','rev-parse','HEAD']).strip()
+            diff=subprocess.check_output(['git','diff'])
+            ev.SetTag('EUDAQ_GIT'   ,git )
+            ev.SetTag('EUDAQ_DIFF'  ,diff)
+            ev.SetTag('ALPIDEDAQ_GIT' ,self.daq.get_software_git())
+            ev.SetTag('ALPIDEDAQ_DIFF',self.daq.get_software_diff())
+        if eore:
+            ev.SetEORE()
+        if bore or eore:
+            for reg,addr in ALPIDE_DUMP_REGS.items():
+                ev.SetTag('ALPIDE_%04x_%s'%(addr,reg),'%d'%self.daq.alpide_reg_read(addr,chipid=self.chipid))
+            self.daq.trgmon.lat.issue()
+            for reg in self.daq.trgmon.regs:
+                ev.SetTag('TRGMON_'+reg.upper(),'%d'%self.daq.trgmon.regs[reg].read())
+        self.SendEvent(ev)
+
+    def read_and_send_event(self):
+        raw=self.daq.event_read()
+        if raw:
+            raw=bytes(raw)
+            assert len(raw)>=20
+            assert list(raw[:4])==[0xAA]*4
+            assert list(raw[-4:])==[0xBB]*4
+            itrg=sum(b<<(j*8) for j,b in enumerate(raw[4: 8]))
+            tev =sum(b<<(j*8) for j,b in enumerate(raw[8:16]))
+            ev=pyeudaq.Event('RawEvent',self.name)
+            ev.SetTriggerN(itrg) # clarification: itrg is the event number form the DAQ board
+            ev.SetTimestamp(begin=tev,end=tev)
+            ev.SetDeviceN(self.plane)
+            ev.AddBlock(0,raw)
+            self.SendEvent(ev)
+            self.idev += 1
+            return True
+        else:
+            return False
+
+if __name__=='__main__':
+    import argparse
+    parser=argparse.ArgumentParser(description='ALPIDE EUDAQ2 Producer',formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('--run-control' ,'-r',default='tcp://localhost:44000')
+    parser.add_argument('--name' ,'-n',default='ALPIDE_XXX')
+    args=parser.parse_args()
+
+    myproducer=ALPIDEProducer(args.name,args.run_control)
+    myproducer.Connect()
+    while(myproducer.IsConnected()):
+        sleep(1)
