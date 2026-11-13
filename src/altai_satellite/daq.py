@@ -1,23 +1,42 @@
+"""
+SPDX-FileCopyrightText: 2025 DESY and the Constellation authors
+SPDX-License-Identifier: EUPL-1.2
+"""
+
+# pyright: reportAttributeAccessIssue=false
+
 import threading
-from alpidedaqboard import ALPIDEBoard
+from alpidedaqboard import ALPIDEDAQBoard
+from enum import StrEnum
 from .registers import AltaiReg, AltaiCmd, dump_addresses
+
+class TriggerMode(StrEnum):
+    PRIMARY = "primary"
+    REPLICA = "replica"
+
+class RdoMode(StrEnum):
+    DCTRL = "DCTRL"
+    DATAPORT = "DATAPORT"
 
 class AltaiDaqBoard:
     def __init__(self, conf) -> None:
         self.serial = conf["serial"] # ok = None
         self.chipid = conf["chipid"] if conf["chipid"] else 0x10
+        self.plane  = conf["plane"]
         self.strblen = None
         self.rdomode = None
         self.triggermode = conf["triggermode"]
-        if self.triggermode not in ["primary", "replica"]:
-            raise ValueError('need to specify trigger mode to be either "primary" or "replica"')
 
-        self._daqboard = ALPIDEBoard(serial)
+        self._daqboard = ALPIDEDAQBoard(self.serial)
         self._lock = threading.Lock()
 
     def power_on(self) -> None:
         with self._lock:
             self._daqboard.power_on()
+
+    def power_off(self) -> None:
+        with self._lock:
+            self._daqboard.power_off()
 
     def reset(self) -> None:
         with self._lock:
@@ -36,7 +55,7 @@ class AltaiDaqBoard:
             self._daqboard.alpide_cmd_issue(0xD2)  # GRST
 
             # now for monitoring, also start clean
-            self._clear_minitors()
+            self._clear_monitors()
 
     def _clear_monitors(self) -> None:
         self._daqboard.rdopar.clr.issue()
@@ -71,7 +90,7 @@ class AltaiDaqBoard:
             )  # initial token, SDR, disable manchester, previous token == self!!!
             self._daqboard.alpide_cmd_issue(0x63)  # RORST (needed!!!)
 
-            if self.rdomode == "DCTRL":
+            if self.rdomode == RdoMode.DCTRL:
                 self._daqboard.alpide_reg_write(0x0001, 0x020D, chipid=self.chipid)  # normal readout, TRG mode, CMU RDO
                 self._daqboard.rdoctrl.delay_set.write(
                     2 * self.strblen + 100
@@ -79,7 +98,7 @@ class AltaiDaqBoard:
                 self._daqboard.rdoctrl.chipid.write(self.chipid)
                 self._daqboard.rdoctrl.ctrl.write(1)  # enable DCTRL RDO
                 self._daqboard.rdomux.ctrl.write(2)  # select DCTRL RDO
-            elif self.rdomode == "DATAPORT":
+            elif self.rdomode == RdoMode.DATAPORT:
                 self._daqboard.alpide_reg_write(0x0001, 0x000D, chipid=self.chipid)  # normal readout, TRG mode
                 self._daqboard.rdopar.ctrl.write(1)  # enable parallel port RDO
                 self._daqboard.rdomux.ctrl.write(1)  # select parallel port RDO
@@ -92,37 +111,54 @@ class AltaiDaqBoard:
 
     def stop_trigger(self) -> None:
         with self._lock:
-            if self.triggermode == "primary":
+            if self.triggermode == TriggerMode.PRIMARY:
                 self._daqboard.trg.ctrl.write(0b1001)  # primary mode, no maskig of external trigger or busy, force busy
                 # TODO: needs to go out:
                 self._daqboard.trgseq.stop.issue()
-            elif self.triggermode == "replica":
+            elif self.triggermode == TriggerMode.REPLICA:
                 self._daqboard.trg.ctrl.write(0b0001)  # replica mode, no masking, force busy
         
     def arm_trigger(self) -> None:
         with self._lock:
-            if self.triggermode == "primary":
+            if self.triggermode == TriggerMode.PRIMARY:
                 self._daqboard.trg.ctrl.write(0b1000)  # primary mode, no maskig of external trigger or busy, no forced busy (anymore)
                 # TODO: needs to go out:
                 self._daqboard.trgseq.dt_set.write(8000)  # 10 kHz
                 self._daqboard.trgseq.ntrg_set.write(300)
-            elif self.triggermode == "replica":
+            elif self.triggermode == TriggerMode.REPLICA:
                 self._daqboard.trg.ctrl.write(0b0000)  # replica mode, no masking, no forced busy (anymore)
     
-    def read_event(self) -> int:
+    def read_event(self) -> bytes | None:
         with self._lock:
-            self._daqboard.event_read()
-
+            return self._daqboard.event_read() 
+    
     def get_power_status(self) -> tuple[float, float, bool]:
         with self._lock:
             idda, iddd, status = self._daqboard.power_status()
         return idda, iddd, status
 
-    def get_carrier_temp(self) -> float:
+    def get_carrier_temp(self) -> float | None:
         with self._lock:
             temp = self._daqboard.carrier_temp()
         return temp
 
     def dump_registers(self) -> dict:
         with self._lock:
-            return {reg.name : self._daqboard.alpide_reg_read(addr, chipid=self.chipid) for reg, addr in dump_addresses().items()}
+            return {"ALPIDE_%04x_%s" % (addr,name): "%d" % self.daq.alpide_reg_read(addr,chipid=self.chipid) for name, addr in dump_addresses().items()}
+
+    def get_info4bor(self) -> dict:
+        fpga_git = self._daqboard.get_fpga_git()
+        fpga_compile = self._daqboard.get_fpga_tcompile()
+        alpidedaq_git = self._daqboard.get_software_git()
+        alpidedaq_diff = self._daqboard.get_software_diff()
+
+        return {"FPGA_FIT": fpga_git, 
+                "FPGA_COMPILE": fpga_compile,
+                "ALPIDEDAQ_GIT": alpidedaq_git,
+                "ALPIDEDAQ_DIFF": alpidedaq_diff}
+
+    def read_trigger_monitor(self) -> dict[str, int]:
+        """Latch and read the firmware trigger-monitor counters."""
+        with self._lock:
+            self._daqboard.trgmon.lat.issue()
+            return {"TRGMON_ " + name.upper(): reg.read() for name, reg in self.daq.trgmon.regs.items()}

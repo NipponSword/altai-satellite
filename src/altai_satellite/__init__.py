@@ -5,4 +5,4 @@ SPDX-License-Identifier: EUPL-1.2
 
 from importlib.metadata import version
 
-__version__ = version("altaiSatellite")
+__version__ = version("altai-satellite")

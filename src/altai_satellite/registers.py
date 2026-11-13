@@ -28,6 +28,8 @@ class AltaiReg(IntEnum):
     DAC_CMU = 0x000F
     CMU_DUM_CONFIG = 0x0010
     CMU_ERROR = 0x0011
+    DMU_FIFO_LSB = 0x0012
+    DMU_FIFO_MSB = 0x0013
     BUSY_MIN_WIDTH = 0x001B
     ANALOG_OVERRIDE = 0x0600
     VRESETP = 0x0601
@@ -64,7 +66,7 @@ def region_status(region: int) -> int:
 
 
 # Reading the DMU FIFO pops data, so it must never be dumped.
-_NOT_DUMPED = {Reg.DMU_FIFO_LSB, Reg.DMU_FIFO_MSB}
+_NOT_DUMPED = {AltaiReg.DMU_FIFO_LSB, AltaiReg.DMU_FIFO_MSB}
 
 
 def dump_addresses() -> dict[str, int]:
