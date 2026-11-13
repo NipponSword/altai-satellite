@@ -3,109 +3,39 @@ SPDX-FileCopyrightText: 2025 DESY and the Constellation authors
 SPDX-License-Identifier: EUPL-1.2
 """
 
-from constellation.core.satellite import Satellite
+from constellation.core.transmitter_satellite import TransmitterSatellite
 from constellation.core.configuration import Configuration, enum_type
+from constellation.core.monitoring import schedule_metric
+from constellation.core.protocol.cscp1 import SatelliteState
 
 from . import __version__
+from .daq import AltaiDaqBoard
 from datetime import datetime
 from time import sleep
-import alpidedaqboard
 import subprocess
+import threading
 
 
-class Altai(Satellite, version=__version__):
+class Altai(TransmitterSatellite, version=__version__):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.daq = None
-        self.is_running = False
-        self.triggermode = None
-        self.idev = 0
-        self.isev = 0
+        self.conf = None
+        self._lock = threading.RLock()
 
-    def do_initialize(self, config: Configuration) -> str:
+    def do_initializing(self, config: Configuration) -> str:
         conf = self._read_config()
-        self.daq = alpidedaqboard.ALPIDEDAQBoard(conf["serial"])
+        self.daq = AltaiDaqBoard(conf["serial"], conf["chipid"])
         self.plane = int(conf["plane"])
-        self.triggermode = conf["triggermode"]
-        if self.triggermode not in ["primary", "replica"]:
-            raise ValueError('need to specify trigger mode to be either "primary" or "replica"')
         self.stoptrigger()
 
         return "Do initializing complete"
 
     def do_launching(self) -> str:
-        self.idev = 0
-        self.isev = 0
         self.stoptrigger()
-
         self.daq.power_on()
-
-        # just in case we got up on the wrong side of the fw...
-        self.daq.trg.opcode.write(0x55)
-        self.daq.rdoctrl.rst.issue()
-        self.daq.rdopar.rst.issue()
-        self.daq.evtpkr.rst.issue()
-        self.daq.evtbld.rst.issue()
-        self.daq.trg.rstrdobsy.issue()
-        self.daq.purge_events()
-        self.daq.xonxoff.rst.issue()
-
-        # now for monitoring, also start clean
-        self.daq.rdopar.clr.issue()
-        self.daq.trgmon.clr.issue()
-
-        # ...or the ALPIDE...
-        self.daq.alpide_cmd_issue(0xD2)  # GRST
-
-        # now for monitoring, also start clean
-        self.daq.rdopar.clr.issue()
-        self.daq.trgmon.clr.issue()
-
-        conf = self.GetConfiguration().as_dict()
-        self.chipid = int(conf["CHIPID"])
-        if "VCASN" in conf:
-            self.daq.alpide_reg_write(0x604, int(conf["VCASN"]), chipid=self.chipid)
-        if "VCASN2" in conf:
-            self.daq.alpide_reg_write(0x607, int(conf["VCASN2"]), chipid=self.chipid)
-        if "ITHR" in conf:
-            self.daq.alpide_reg_write(0x60E, int(conf["ITHR"]), chipid=self.chipid)
-        if "VCLIP" in conf:
-            self.daq.alpide_reg_write(0x608, int(conf["VCLIP"]), chipid=self.chipid)
-        if "IDB" in conf:
-            self.daq.alpide_reg_write(0x60C, int(conf["IDB"]), chipid=self.chipid)
-        self.daq.alpide_reg_write(0x602, int(conf["VRESETD"]), chipid=self.chipid)
-
-        self.strblen = int(conf["STROBE_LENGTH"])
-        self.rdomode = conf["RDOMODE"]
-
-        self.daq.alpide_cmd_issue(0xE4)  # PRST
-        self.daq.alpide_reg_write(
-            0x0004, 0x0060, chipid=self.chipid
-        )  # disable busy monitoring, analog test pulse, enable test strobe
-        self.daq.alpide_reg_write(0x0005, self.strblen, chipid=self.chipid)  # strobe length
-        self.daq.alpide_reg_write(
-            0x0010, 0x0030, chipid=self.chipid
-        )  # initial token, SDR, disable manchester, previous token == self!!!
-        self.daq.alpide_cmd_issue(0x63)  # RORST (needed!!!)
-
-        if self.rdomode == "DCTRL":
-            self.daq.alpide_reg_write(0x0001, 0x020D, chipid=self.chipid)  # normal readout, TRG mode, CMU RDO
-            self.daq.rdoctrl.delay_set.write(
-                2 * self.strblen + 100
-            )  # when to start reading (@80MHz, i.e. at least strobe-time x2 + sth.) ... TODO
-            self.daq.rdoctrl.chipid.write(self.chipid)
-            self.daq.rdoctrl.ctrl.write(1)  # enable DCTRL RDO
-            self.daq.rdomux.ctrl.write(2)  # select DCTRL RDO
-        elif self.rdomode == "DATAPORT":
-            self.daq.alpide_reg_write(0x0001, 0x000D, chipid=self.chipid)  # normal readout, TRG mode
-            self.daq.rdopar.ctrl.write(1)  # enable parallel port RDO
-            self.daq.rdomux.ctrl.write(1)  # select parallel port RDO
-            self.daq.xonxoff.ctrl.write(1)  # enable XON XOFF
-        else:
-            raise ValueError('RDOMODE "%s" not understood' % self.rdomode)
-
-        self.daq.trg.minspacing.write(int(conf["minspacing"]) if "minspacing" in conf else 0)
-        self.daq.trg.fixedbusy.write(int(conf["fixedbusy"]) if "fixedbusy" in conf else 0)
+        self.daq.reset()
+        self.daq.configure(self.conf if self.conf else self._read_config)
 
         return "Do launching complete"
 
@@ -114,70 +44,47 @@ class Altai(Satellite, version=__version__):
         self.isev = 0
         self.send_status_event(datetime.now(), bore=True)
         self.isev += 1
-        self.armtrigger()
-        self.is_running = True
+        self.arm_trigger()
 
         return "Do starting complete"
 
-    def do_run(self) -> str:
+    # ==============================
+
+    def do_stopping(self) -> str:
         self.stoptrigger()
-        self.is_running = False
 
-        return "Do running complete"
+        return "Do stopping complete"
 
-    def DoReset(self):
+    #
+    # TODO: which one ↑↓ ???
+    #
+
+    def do_landing(self):
         self.stoptrigger()
-        self.is_running = False
-        # TODO: cleanup!?
+        
+        return "Do landing complete"
 
-    def DoStatus(self):
+    # ==============================
+
+    def DoStatus(self): # TODO: this should be replaced to ??
         self.SetStatusTag("StatusEventN", "%d" % self.isev)
         self.SetStatusTag("DataEventN", "%d" % self.idev)
 
-    def RunLoop(self):
+    def do_run(self) -> str:
         # status events: roughly every 10s (time checked at least every 1000 events or at receive timeout)
-        tlast = datetime.now()
-        ilast = 0
-        while self.is_running:
-            checkstatus = False
-            if not self.read_and_send_event():
-                checkstatus = True
-            if (self.idev - ilast) % 1000 == 0:
-                checkstatus = True
-            if checkstatus:
-                if (datetime.now() - tlast).total_seconds() >= 10:
-                    tlast = datetime.now()
-                    ilast = self.idev
-                    self.send_status_event(tlast)
-                    self.isev += 1
-        self.send_status_event(datetime.now())
-        self.isev += 1
-        while self.read_and_send_event():  # try to get anything remaining
-            pyeudaq.EUDAQ_INFO("Reading remaining events...")
-        self.send_status_event(datetime.now(), eore=True)
-        self.isev += 1
 
-    def armtrigger(self):
-        if self.triggermode == "primary":
-            self.daq.trg.ctrl.write(0b1000)  # primary mode, no maskig of external trigger or busy, no forced busy (anymore)
-            # TODO: needs to go out:
-            self.daq.trgseq.dt_set.write(8000)  # 10 kHz
-            self.daq.trgseq.ntrg_set.write(300)
-        elif self.triggermode == "replica":
-            self.daq.trg.ctrl.write(0b0000)  # replica mode, no masking, no forced busy (anymore)
+        while self.stop_requested:
+            self.read_and_send_event()
+        
+        while self.read_and_send_event():
+            self.log.info("Reading remining events...")
 
-    def stoptrigger(self):
-        if self.triggermode == "primary":
-            self.daq.trg.ctrl.write(0b1001)  # primary mode, no maskig of external trigger or busy, force busy
-            # TODO: needs to go out:
-            self.daq.trgseq.stop.issue()
-        elif self.triggermode == "replica":
-            self.daq.trg.ctrl.write(0b0001)  # replica mode, no masking, force busy
+        return "Do running complete"
 
     def send_status_event(self, time, bore=False, eore=False):
         ev = pyeudaq.Event("RawEvent", self.name + "_status")
-        idda, iddd, status = self.daq.power_status()
-        temp = self.daq.carrier_temp()
+        idda, iddd, status = self.daq.get_power_status()
+        temp = self.daq.get_carrier_temp()
         ev.SetTag("IDDA", "%.2f mA" % idda)
         ev.SetTag("IDDD", "%.2f mA" % iddd)
         ev.SetTag("Temperature", "%.2f C" % temp if temp else "Invalid temperature read!")
@@ -198,15 +105,16 @@ class Altai(Satellite, version=__version__):
         if eore:
             ev.SetEORE()
         if bore or eore:
-            for reg, addr in ALPIDE_DUMP_REGS.items():
-                ev.SetTag("ALPIDE_%04x_%s" % (addr, reg), "%d" % self.daq.alpide_reg_read(addr, chipid=self.chipid))
+            dumpe_result = self.daq.dump_registers()
+            for regs in dump_result:
+                ev.SetTag("ALPIDE_%s" % reg.key(), "%d" % regs.value())
             self.daq.trgmon.lat.issue()
             for reg in self.daq.trgmon.regs:
                 ev.SetTag("TRGMON_" + reg.upper(), "%d" % self.daq.trgmon.regs[reg].read())
         self.SendEvent(ev)
 
     def read_and_send_event(self):
-        raw = self.daq.event_read()
+        raw = self.daq.read_event()
         if raw:
             raw = bytes(raw)
             assert len(raw) >= 20
@@ -233,7 +141,7 @@ class Altai(Satellite, version=__version__):
         config.set_default(key="RDOMODE", value="DATAPORT")
 
         configuration = {
-            "serial": config.get_int(key="serial",),
+            "serial": config.get_str(key="serial",),
             "plane": config.get_int(key="plane"),
             "triggermode": config.get_str(key="triggermode"),
             "minspacing": config.get_int(key="minspacing"),

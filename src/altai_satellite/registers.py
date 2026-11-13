@@ -3,11 +3,12 @@ SPDX-FileCopyrightText: 2025 DESY and the Constellation authors
 SPDX-License-Identifier: EUPL-1.2
 """
 
-from enum import Enum, IntFlag, unique
+from enum import IntEnum, unique
 
+N_REGIONS = 32
 
 @unique
-class AltaiReg(Enum):
+class AltaiReg(IntEnum):
     #   NAME        =  addr
     COMMAND = 0x0000
     MODE_CTRL = 0x0001
@@ -46,3 +47,30 @@ class AltaiReg(Enum):
     BUFFER_BYPASS = 0x060F
     SEU_COUNTER = 0x0700
     TEST_CONTROL = 0x0701
+
+@unique
+class AltaiCmd(IntEnum):
+    GRST = 0xD2
+    PRST = 0xE4
+    RORST = 0x63
+
+
+def dc_disable(region: int) -> int:
+    return region << 11 | 0x300
+
+
+def region_status(region: int) -> int:
+    return region << 11 | 0x301
+
+
+# Reading the DMU FIFO pops data, so it must never be dumped.
+_NOT_DUMPED = {Reg.DMU_FIFO_LSB, Reg.DMU_FIFO_MSB}
+
+
+def dump_addresses() -> dict[str, int]:
+    """Registers recorded in BOR/EOR (side-effect-free reads only)."""
+    addresses = {reg.name: reg.value for reg in AltaiReg if reg not in _NOT_DUMPED}
+    for region in range(N_REGIONS):
+        addresses[f"DC_DISABLE_{region}"] = dc_disable(region)
+        addresses[f"REGION_STATUS_{region}"] = region_status(region)
+    return addresses
