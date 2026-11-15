@@ -2,67 +2,100 @@
 # SPDX-FileCopyrightText: 2025 DESY and the Constellation authors
 # SPDX-License-Identifier: CC-BY-4.0 OR EUPL-1.2
 title: "Template"
-description: "Satellite base structure serving as the basis for new developments"
+description: "Satellite of ALTAI (ported from eudaq2 ALPIDE producer)"
 category: "External"
 language: "Python"
-parent_class: "Satellite"
+parent_class: "TransmitterSatellite"
 ---
 
-## First Steps
-
-This is a template for new Constellation satellites, written in Python.
-The following steps help in setting up the new satellite, rename the relevant classes and files, and run the satellite for the first time.
-Additional information as well as detailed tutorials on how to implement a new satellite in Python can be found in the
-[Constellation Application Developer Guide](https://constellation.pages.desy.de/application_development/index.html).
-
-* Rename the satellite using the self-destructing script:
-
-  ```sh
-  rename-template.py MyName
-  ```
-
-* Adjust the satellite base class depending on the target functionality:
-  * `TransmitterSatellite`: This satellite will generate and transmit data during the run
-  * `ReceiverSatellite`: This satellite will receive data during the run
-  * `Satellite`: This satellite will neither send nor receive data via CDTP during the run
-* Implement the satellite code
-* Install the Satellite:
-  * From the template's base directory (where the `pyproject.toml` is located), run `pip install ./`
-  * During development, you might want to add the `-e` switch to [install an editable install](https://setuptools.pypa.io/en/latest/userguide/development_mode.html), meaning changes in the source code of your satellite will directly modify the installed version.
-* Run the satellite
-* Update this `README.md`
-  * Remove the "First Steps" section
-  * Update the `parent_class` tag in the `README.md` to the satellite base class used in the code
-  * Update the satellite description, parameter and metric list, custom commands of the `README.md` structure below
-  * Add a configuration example for easy copy & paste
-  * Add the satellite to the [Constellation Satellite Library](https://constellation.pages.desy.de/satellites/index.html) as
-    described in the [Constellation Application Developer Guide](https://constellation.pages.desy.de/application_development/intro/listing.html)
-
----
-
-## Description
+## 📌 Description
 
 This is a detailed description of the satellite and its functionality.
 Possible dependencies are described alongside its features, potential pitfalls and other information.
 
-## Parameters
+## 📝 Requirements
+
+- Python >= 3.11 (tested: Python3.12, ConstellationDAQ 1.0.2
+- uv (or plain python -m venv+pip)
+- ALTAI DAQ board reachable over USB
+- `alpide-daq-software` from [ALICE-ITS3-WP3-Gitlab](https://gitlab.cern.ch/alice-its3-wp3/alpide-daq-software) (Internal access)
+
+## 🏢 Building
+Before building, check you have already cloned `alpide-daq-software` as following
+```shell
+  projects
+    ├── alpide-daq-software
+    └── altai-satellite
+``` 
+Create virtual environment
+```shell
+git clone git@github.com:NipponSword/momiji-tlu-satellite.git
+cd altai-satellite
+uv venv --python 3.12
+source .venv/bin/activate
+```
+Then install satellite with `alpide-daq-software`
+```shell
+uv sync --extra alpidedaqboard
+```
+
+## 🚀 Usage
+Starting satellite with
+```shell
+SatelliteAltai -n <name_of_plane> -g <group_name>
+```
+
+## 🔩 Parameters
 
 The following parameters are read and interpreted by this satellite. Parameters without a default value are required.
 
 | Parameter | Description | Type | Default Value |
 | --------- | ----------- | ---- | ------------- |
-| `example` | Description of the parameter | Boolean | `true` |
+| `serial` | Serial number of the board | str |  |
+| `plane` | Plane number in the telescope | int |  |
+| `triggermode` | Trigger mode. `primary` or `replica` | str |  |
+| `STROBE_LENGTH` | AFE bias | int |  |
+| `minspacing` | Minimum spacing to accept the next trigger | int | `0` |
+| `fixedbusy` | Fixed time of busy once accepting trigger | int | `0` |
+| `status_interval` | Time to get next metrics | float | `1.0` |
+| `RDOMODE` | Readout mode. `DATAPORT` or `DCTRL` | int | `DATA_PORT` |
+| `CHIPID` | AFE bias | int | `0x10` |
+| `VCASN` | AFE bias | int | `57` |
+| `VCASN2` | AFE bias | int | `64` |
+| `ITHR` | AFE bias | int | `51` |
+| `VCLIP` | AFE bias | int | `0` |
+| `IDB` | AFE bias | int | `64` |
+| `VRESETD` | AFE bias | int | `147` |
+
+> [!WARNING]
+> The DAC values of AFE bias are set as an default value on the firmware. The software itself does not define the default value (except VRESETD), and if not defined in configuration file, the default reset value on firmware will be used.
 
 ### Configuration Example
 
 An example configuration for this satellite which could be dropped into a Constellation configuration as a starting point
 
 ```toml
-[Template.One]
-example = false
+[Altai.plane_0]
+ITHR          = 61
+VCASN         = 109
+VCASN2        = 121
+VCLIP         = 60
+IDB           = 29
+STROBE_LENGTH = 400
+
+# plane_1, 2, 3, ...
+
+[Altai.plane_5]
+ITHR          = 61
+VCASN         = 106
+VCASN2        = 118
+VCLIP         = 60
+IDB           = 29
+STROBE_LENGTH = 400
 ```
 
-## Metrics
+
+## 📉 Metrics
 
 The following metrics are distributed by this satellite and can be subscribed to.
 
