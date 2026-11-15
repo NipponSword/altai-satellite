@@ -162,7 +162,7 @@ class Altai(TransmitterSatellite, version=__version__):
         
         return configuration
 
-def parse_header(self, raw: bytes) -> tuple[int, int]:
+def parse_header(raw: bytes) -> tuple[int, int]:
     
     header_is_correct = (
         len(raw) >= 20 and
