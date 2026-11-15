@@ -2,12 +2,12 @@
 SPDX-FileCopyrightText: 2025 DESY and the Constellation authors
 SPDX-License-Identifier: EUPL-1.2
 """
-from . import __version__
-
 from constellation.core.logging import setup_cli_logging
 from constellation.core.transmitter_satellite import TransmitterSatelliteArgumentParser
 
+from . import __version__
 from .altai_satellite import Altai
+
 
 def main(args=None):
     """altai satellite"""

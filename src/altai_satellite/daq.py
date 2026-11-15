@@ -8,8 +8,10 @@ SPDX-License-Identifier: EUPL-1.2
 import threading
 from enum import StrEnum
 
-from .registers import AltaiReg, AltaiCmd, dump_addresses
 from alpidedaqboard import ALPIDEDAQBoard
+
+from .registers import AltaiCmd, AltaiReg, dump_addresses
+
 
 class TriggerMode(StrEnum):
     PRIMARY = "primary"
@@ -21,8 +23,8 @@ class RdoMode(StrEnum):
 
 class AltaiDaqBoard:
     def __init__(self, conf) -> None:
-        self.serial = conf["serial"] # ok = None
-        self.chipid = conf["chip_id"] if conf["chip_id"] else 0x10
+        self.serial = conf["serial"]
+        self.chipid = conf["chip_id"]
         self.plane  = conf["plane"]
         self.strblen = None
         self.rdomode = None
@@ -64,44 +66,36 @@ class AltaiDaqBoard:
 
     def configure(self, conf: dict) -> None:
         with self._lock:
-            if "vcasn" in conf:
-                self._daqboard.alpide_reg_write(
-                    AltaiReg.VCASN,
-                    int(conf["vcasn"]),
-                    chipid=self.chipid
-                )
-            if "vcasn2" in conf:
-                self._daqboard.alpide_reg_write(
-                    AltaiReg.VCASN2,
-                    int(conf["vcasn2"]),
-                    chipid=self.chipid
-                )
-            if "ithr" in conf:
-                self._daqboard.alpide_reg_write(
-                    AltaiReg.ITHR,
-                    int(conf["ithr"]),
-                    chipid=self.chipid
-                )
-            if "vclip" in conf:
-                self._daqboard.alpide_reg_write(
-                    AltaiReg.VCLIP,
-                    int(conf["vclip"]),
-                    chipid=self.chipid
-                )
-            if "idb" in conf:
-                self._daqboard.alpide_reg_write(
-                    AltaiReg.IDB,
-                    int(conf["idb"]),
-                    chipid=self.chipid
-                )
-
+            self._daqboard.alpide_reg_write(
+                AltaiReg.VCASN,
+                int(conf["vcasn"]),
+                chipid=self.chipid
+            )
+            self._daqboard.alpide_reg_write(
+                AltaiReg.VCASN2,
+                int(conf["vcasn2"]),
+                chipid=self.chipid
+            )
+            self._daqboard.alpide_reg_write(
+                AltaiReg.ITHR,
+                int(conf["ithr"]),
+                chipid=self.chipid
+            )
+            self._daqboard.alpide_reg_write(
+                AltaiReg.VCLIP,
+                int(conf["vclip"]),
+                chipid=self.chipid
+            )
+            self._daqboard.alpide_reg_write(
+                AltaiReg.IDB,
+                int(conf["idb"]),
+                chipid=self.chipid
+            )
             self._daqboard.alpide_reg_write(
                 AltaiReg.VRESETD,
                 int(conf["vresetd"]),
                 chipid=self.chipid
             )
-
-            self.chipid = int(conf["chip_id"])
 
             self.strblen = int(conf["strobe_length"])
             self.rdomode = conf["rdo_mode"]
@@ -174,7 +168,7 @@ class AltaiDaqBoard:
     
     def read_event(self) -> bytes | None:
         with self._lock:
-            return self._daqboard.event_read() 
+            return bytes(self._daqboard.event_read()) 
     
     def get_power_status(self) -> tuple[float, float, bool]:
         with self._lock:
@@ -191,14 +185,14 @@ class AltaiDaqBoard:
     def dump_registers(self) -> dict:
         with self._lock:
             return {
-                f"ALPIDE_{addr:04x}_{name}": self.daq.alpide_reg_read(
+                f"ALPIDE_{addr:04x}_{name}": self._daqboard.alpide_reg_read(
                     addr,chipid=self.chipid
                 )
                 for name, addr in dump_addresses().items()
             }
 
     def get_firmware_info(self) -> dict:
-        with self._lock():
+        with self._lock:
             fpga_git = self._daqboard.get_fpga_git()
             fpga_compile = self._daqboard.get_fpga_tcompile()
             alpidedaq_git = self._daqboard.get_software_git()
@@ -213,4 +207,4 @@ class AltaiDaqBoard:
         """Latch and read the firmware trigger-monitor counters."""
         with self._lock:
             self._daqboard.trgmon.lat.issue()
-            return {"TRGMON_ " + name.upper(): reg.read() for name, reg in self.daq.trgmon.regs.items()}
+            return {f"TRGMON_{name.upper()}": reg.read() for name, reg in self.daq.trgmon.regs.items()}
