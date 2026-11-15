@@ -29,7 +29,7 @@ Before building, check you have already cloned `alpide-daq-software` as followin
 ``` 
 Create virtual environment
 ```shell
-git clone git@github.com:NipponSword/momiji-tlu-satellite.git
+git clone git@github.com:NipponSword/altai-satellite.git
 cd altai-satellite
 uv venv --python 3.12
 source .venv/bin/activate
@@ -51,20 +51,20 @@ The following parameters are read and interpreted by this satellite. Parameters 
 
 | Parameter | Description | Type | Default Value |
 | --------- | ----------- | ---- | ------------- |
-| `serial` | Serial number of the board | str |  |
-| `plane` | Plane number in the telescope | int |  |
-| `trigge_rmode` | Trigger mode. `"primary"` or `"replica"` | str |  |
-| `strobe_length` | Strobe length | int |  |
-| `vcasn` | AFE bias | int |  |
-| `vcasn2` | AFE bias | int |  |
-| `ithr` | AFE bias | int |  |
-| `vclip` | AFE bias | int |  |
-| `idb` | AFE bias | int |  |
-| `chip_id` | AFE bias | int | `0x10` |
+| `serial` | Serial number of the board | str | - |
+| `plane` | Plane number in the telescope | int | - |
+| `trigger_mode` | Trigger mode. `"primary"` or `"replica"` | str | - |
+| `strobe_length` | Strobe length | int | - |
+| `vcasn` | AFE voltage VCASN | int | - |
+| `vcasn2` | AFE voltage VCASN2| int | - |
+| `ithr` | AFE current ITHR | int | - |
+| `vclip` | AFE voltage VCLIP | int | - |
+| `idb` | AFE current IDB | int | - |
+| `chip_id` | Chip ID | int | `0x10` |
 | `min_spacing` | Minimum spacing to accept the next trigger | int | `0` |
 | `fixed_busy` | Fixed time of busy once accepting trigger | int | `0` |
 | `rdo_mode` | Readout mode. `"dataport"` or `"dctrl"` | int | `"dataport"` |
-| `vresetd` | AFE bias | int | `147` |
+| `vresetd` | AFE voltage VRESETD | int | `147` |
 
 ### Configuration Example
 
