@@ -2,27 +2,13 @@
 # SPDX-FileCopyrightText: 2025 DESY and the Constellation authors
 # SPDX-License-Identifier: CC-BY-4.0 OR EUPL-1.2
 title: "Template"
-description: "Satellite of ALTAI (ported from eudaq2 ALPIDE producer)"
-category: "External"
+description: "Constellation Satellite for ALTAI (ported from eudaq2 ALPIDE producer)"
+category: "Readout System"
 language: "Python"
 parent_class: "TransmitterSatellite"
 ---
 
-<<<<<<< HEAD
 ## 📌 Description
-=======
-## First Steps
-
-Place `alpide-daq-software` at the same level of directory.
-
-```shell
-uv venv
-source .venv/bin/activate
-uv sync --extra alpidedaqboard
-```
-
-## Description
->>>>>>> b84c27bf092213cccce7c9051d45a8cf0ce9100a
 
 This is a detailed description of the satellite and its functionality.
 Possible dependencies are described alongside its features, potential pitfalls and other information.
@@ -54,7 +40,7 @@ uv sync --extra alpidedaqboard
 ```
 
 ## 🚀 Usage
-Starting satellite with
+Start satellite with
 ```shell
 SatelliteAltai -n <name_of_plane> -g <group_name>
 ```
@@ -67,22 +53,18 @@ The following parameters are read and interpreted by this satellite. Parameters 
 | --------- | ----------- | ---- | ------------- |
 | `serial` | Serial number of the board | str |  |
 | `plane` | Plane number in the telescope | int |  |
-| `triggermode` | Trigger mode. `primary` or `replica` | str |  |
-| `STROBE_LENGTH` | AFE bias | int |  |
-| `minspacing` | Minimum spacing to accept the next trigger | int | `0` |
-| `fixedbusy` | Fixed time of busy once accepting trigger | int | `0` |
-| `status_interval` | Time to get next metrics | float | `1.0` |
-| `RDOMODE` | Readout mode. `DATAPORT` or `DCTRL` | int | `DATA_PORT` |
-| `CHIPID` | AFE bias | int | `0x10` |
-| `VCASN` | AFE bias | int | `57` |
-| `VCASN2` | AFE bias | int | `64` |
-| `ITHR` | AFE bias | int | `51` |
-| `VCLIP` | AFE bias | int | `0` |
-| `IDB` | AFE bias | int | `64` |
-| `VRESETD` | AFE bias | int | `147` |
-
-> [!WARNING]
-> The DAC values of AFE bias are set as an default value on the firmware. The software itself does not define the default value (except VRESETD), and if not defined in configuration file, the default reset value on firmware will be used.
+| `trigge_rmode` | Trigger mode. `"primary"` or `"replica"` | str |  |
+| `strobe_length` | Strobe length | int |  |
+| `vcasn` | AFE bias | int |  |
+| `vcasn2` | AFE bias | int |  |
+| `ithr` | AFE bias | int |  |
+| `vclip` | AFE bias | int |  |
+| `idb` | AFE bias | int |  |
+| `chip_id` | AFE bias | int | `0x10` |
+| `min_spacing` | Minimum spacing to accept the next trigger | int | `0` |
+| `fixed_busy` | Fixed time of busy once accepting trigger | int | `0` |
+| `rdo_mode` | Readout mode. `"dataport"` or `"dctrl"` | int | `"dataport"` |
+| `vresetd` | AFE bias | int | `147` |
 
 ### Configuration Example
 
@@ -90,22 +72,22 @@ An example configuration for this satellite which could be dropped into a Conste
 
 ```toml
 [Altai.plane_0]
-ITHR          = 61
-VCASN         = 109
-VCASN2        = 121
-VCLIP         = 60
-IDB           = 29
-STROBE_LENGTH = 400
+ithr          = 61
+vcasn         = 109
+vcasn2        = 121
+vclip         = 60
+idb           = 29
+strobe_length = 400
 
 # plane_1, 2, 3, ...
 
 [Altai.plane_5]
-ITHR          = 61
-VCASN         = 106
-VCASN2        = 118
-VCLIP         = 60
-IDB           = 29
-STROBE_LENGTH = 400
+ithr          = 61
+vcasn         = 106
+vcasn2        = 118
+vclip         = 60
+idb           = 29
+strobe_length = 400
 ```
 
 
@@ -115,12 +97,7 @@ The following metrics are distributed by this satellite and can be subscribed to
 
 | Metric | Description | Value Type | Interval |
 | ------ | ----------- | ---------- | -------- |
-| `TIME` | Time since launch in seconds | Float | 10s |
-
-## Custom Commands
-
-This section describes all custom commands the satellite exposes to the command interface.
-
-| Command | Description | Arguments | Return Value | Allowed States |
-| ------- | ----------- | --------- | ------------ | -------------- |
-| `test` | This command always returns `true` | - | Boolean, always `true` | `NEW`, `INIT`, `ORBIT` |
+| `idda` | Current IDDA  | Float | 5s |
+| `iddd` | Current IDDD  | Float | 5s |
+| `temperature` | Current temperature of chip board  | Float | 5s |
+| `trigger_id` | Current trigger_id decoded from DAQ raw data | Int | 5s |
