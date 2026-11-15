@@ -1,66 +1,50 @@
-# SPDX-FileCopyrightText: 2025 DESY and the Constellation authors
-# SPDX-License-Identifier: CC0-1.0
+# SPDX-FileCopyrightText: 2026 Kai
+# SPDX-License-Identifier: EUPL-1.2
 
 [build-system]
 requires = ["setuptools", "setuptools-scm"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "altaiSatellite"
+name = "altai-satellite"
 dynamic = ["version"]
-authors = [{name = "Constellation Authors"}]
-description = "ALTAI Satellite for Constellation"
+authors = [{name = "Kai Teramoto"}]
+description = "Constellation satellite for the ALTAI telescope DAQ boards"
 readme = "README.md"
 license = {text = "EUPL-1.2"}
-classifiers = [
-    "Development Status :: 4 - Beta",
-    "Programming Language :: Python",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Operating System :: Unix",
-    "License :: OSI Approved",
-    "License :: OSI Approved :: European Union Public Licence 1.2 (EUPL 1.2)",
-    "Intended Audience :: Science/Research",
-    "Topic :: Scientific/Engineering",
-]
 requires-python = ">=3.11"
 dependencies = [
-    "ConstellationDAQ",
+    "ConstellationDAQ==1.0.2",
 ]
+
+[project.optional-dependencies]
+alpidedaqboard = ["alpide-daq-software"]
 
 [project.scripts]
 SatelliteAltai = "altai_satellite.__main__:main"
 
 [project.entry-points."constellation.satellites"]
-altai_satellite = "altai_satellite"
+Altai = "altai_satellite"
 
-[project.urls]
-Homepage = "TODO"
-Repository = "TODO"
+[dependency-groups]
+dev = ["basedpyright", "ruff", "pytest"]
 
-[project.optional-dependencies]
-dev = [
-    "basedpyright",
-    "ruff",
-]
+[tool.uv.sources]
+alpide-daq-software = { path = "../alpide-daq-software", editable = true }
+
+[tool.setuptools_scm]
+version_scheme = "only-version"
+fallback_version = "0.1.0"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.pyright]
 typeCheckingMode = "standard"
+extraPaths = ["../alpide-daq-software"]
 
 [tool.ruff]
 line-length = 125
 
 [tool.ruff.lint]
-select = [
-    "E",   # pycodestyle
-    "F",   # pyflakes
-    "B",   # flake8-bugbear
-    "A",   # flake8-builtins
-    "I",   # isort
-    "UP",  # pyupgrade
-]
-
-[tool.setuptools_scm]
-version_scheme = "only-version"
+select = ["E", "F", "B", "A", "I", "UP"]
