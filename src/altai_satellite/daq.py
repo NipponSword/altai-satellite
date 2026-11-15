@@ -147,7 +147,7 @@ class AltaiDaqBoard:
                 self._daqboard.rdomux.ctrl.write(1)  # select parallel port RDO
                 self._daqboard.xonxoff.ctrl.write(1)  # enable XON XOFF
             else:
-                raise ValueError('rdo_mode "%s" not understood' % self.rdomode)
+                raise ValueError(f"rdo_mode {self.rdomode} not understood")
 
             self._daqboard.trg.minspacing.write(int(conf["min_spacing"]))
             self._daqboard.trg.fixedbusy.write(int(conf["fixed_busy"]))
@@ -164,7 +164,8 @@ class AltaiDaqBoard:
     def arm_trigger(self) -> None:
         with self._lock:
             if self.triggermode == TriggerMode.PRIMARY:
-                self._daqboard.trg.ctrl.write(0b1000)  # primary mode, no maskig of external trigger or busy, no forced busy (anymore)
+                # primary mode, no maskig of external trigger or busy, no forced busy (anymore)
+                self._daqboard.trg.ctrl.write(0b1000)
                 # TODO: needs to go out:
                 self._daqboard.trgseq.dt_set.write(8000)  # 10 kHz
                 self._daqboard.trgseq.ntrg_set.write(300)
@@ -189,7 +190,12 @@ class AltaiDaqBoard:
 
     def dump_registers(self) -> dict:
         with self._lock:
-            return {"ALPIDE_%04x_%s" % (addr,name): self.daq.alpide_reg_read(addr,chipid=self.chipid) for name, addr in dump_addresses().items()}
+            return {
+                f"ALPIDE_{addr:04x}_{name}": self.daq.alpide_reg_read(
+                    addr,chipid=self.chipid
+                )
+                for name, addr in dump_addresses().items()
+            }
 
     def get_firmware_info(self) -> dict:
         with self._lock():

@@ -5,7 +5,7 @@ SPDX-License-Identifier: EUPL-1.2
 from . import __version__
 
 from constellation.core.transmitter_satellite import TransmitterSatellite
-from constellation.core.configuration import Configuration, enum_type
+from constellation.core.configuration import Configuration
 from constellation.core.monitoring import schedule_metric
 from constellation.core.protocol.cscp1 import SatelliteState
 
@@ -168,6 +168,6 @@ class Altai(TransmitterSatellite, version=__version__):
         }
 
         self.status_interval = config.get_float("status_interval")
-        self.log.debug("Calculating status every %.3f s" % self.status_interval)
+        self.log.debug(f"Calculating status every {self.status_interval:.3f}")
         
         return configuration
