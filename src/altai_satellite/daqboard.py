@@ -168,7 +168,9 @@ class AltaiDaqBoard:
     
     def read_event(self) -> bytes | None:
         with self._lock:
-            return bytes(self._daqboard.event_read()) 
+            raw =  self._daqboard.event_read()
+
+        return bytes(raw) if raw else None
     
     def get_power_status(self) -> tuple[float, float, bool]:
         with self._lock:
@@ -198,8 +200,8 @@ class AltaiDaqBoard:
             alpidedaq_git = self._daqboard.get_software_git()
             alpidedaq_diff = self._daqboard.get_software_diff()
 
-        return {"FPGA_FIT": fpga_git, 
-                "FPGA_COMPILE": fpga_compile.iso_format(),
+        return {"FPGA_GIT": fpga_git, 
+                "FPGA_COMPILE": fpga_compile.isoformat(),
                 "ALPIDEDAQ_GIT": alpidedaq_git,
                 "ALPIDEDAQ_DIFF": alpidedaq_diff}
 
@@ -207,4 +209,4 @@ class AltaiDaqBoard:
         """Latch and read the firmware trigger-monitor counters."""
         with self._lock:
             self._daqboard.trgmon.lat.issue()
-            return {f"TRGMON_{name.upper()}": reg.read() for name, reg in self.daq.trgmon.regs.items()}
+            return {f"TRGMON_{name.upper()}": reg.read() for name, reg in self._daqboard.trgmon.regs.items()}

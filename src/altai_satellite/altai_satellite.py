@@ -8,7 +8,7 @@ from constellation.core.protocol.cscp1 import SatelliteState
 from constellation.core.transmitter_satellite import TransmitterSatellite
 
 from . import __version__
-from .daq import AltaiDaqBoard, RdoMode, TriggerMode
+from .daqboard import AltaiDaqBoard, RdoMode, TriggerMode
 
 
 class Altai(TransmitterSatellite, version=__version__):
@@ -110,7 +110,7 @@ class Altai(TransmitterSatellite, version=__version__):
         if not raw:
             return False
         try:
-            trigger_id, timestamp = self._parse_header(raw)
+            trigger_id, timestamp = parse_header(raw)
         except ValueError as err:
             self.log.warning(f"Dropping malformed event: {err}")
             self.mark_run_tainted()
@@ -131,29 +131,12 @@ class Altai(TransmitterSatellite, version=__version__):
         )
         data_record.add_block(raw)
         self.send_data_record(data_record)
-        self._last_trigger_id = int(trigger_id)
+        self._last_trigger_id = trigger_id
 
         return True
 
-    def _parse_header(self, raw: bytes) -> tuple[int, int]:
-        
-        header_is_correct = (
-            len(raw) >= 20 and
-            list(raw[:4]) == [0xAA] * 4 and
-            list(raw[-4:]) == [0xBB] * 4
-        )
-
-        if not header_is_correct :
-            raise ValueError(f"malformed event ({len(raw)} bytes)")
-        
-        trigger_id = sum(b << (j * 8) for j, b in enumerate(raw[4:8]))
-        timestamp = sum(b << (j * 8) for j, b in enumerate(raw[8:16]))
-
-        return trigger_id, timestamp
-
     def _read_config(self, config: Configuration) -> dict:
         
-        config.set_default(key="status_interval", value=1.0)
         config.set_default(key="min_spacing", value=0)
         config.set_default(key="fixed_busy", value=0)
         config.set_default(key="chip_id", value=0x10)
@@ -178,3 +161,19 @@ class Altai(TransmitterSatellite, version=__version__):
         }
         
         return configuration
+
+def parse_header(self, raw: bytes) -> tuple[int, int]:
+    
+    header_is_correct = (
+        len(raw) >= 20 and
+        list(raw[:4]) == [0xAA] * 4 and
+        list(raw[-4:]) == [0xBB] * 4
+    )
+
+    if not header_is_correct :
+        raise ValueError(f"malformed event ({len(raw)} bytes)")
+    
+    trigger_id = int.from_bytes(raw[4:8], "little")
+    timestamp = int.from_bytes(raw[8:16], "little")
+
+    return trigger_id, timestamp
