@@ -6,14 +6,17 @@ SPDX-License-Identifier: EUPL-1.2
 from constellation.core.logging import setup_cli_logging
 from constellation.core.transmitter_satellite import TransmitterSatelliteArgumentParser
 
+from . import __version__
 from .altai_satellite import Altai
-
 
 def main(args=None):
     """altai satellite"""
 
     # Get a dict of the parsed arguments
-    parser = TransmitterSatelliteArgumentParser(description=main.__doc__, version=altai._satellite_version)
+    parser = TransmitterSatelliteArgumentParser(
+        description=main.__doc__,
+        version=__version__
+        )
     args = vars(parser.parse_args(args))
 
     # Set up logging

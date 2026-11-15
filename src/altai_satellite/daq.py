@@ -15,17 +15,17 @@ class TriggerMode(StrEnum):
     REPLICA = "replica"
 
 class RdoMode(StrEnum):
-    DCTRL = "DCTRL"
-    DATAPORT = "DATAPORT"
+    DCTRL = "dctrl"
+    DATAPORT = "dataport"
 
 class AltaiDaqBoard:
     def __init__(self, conf) -> None:
         self.serial = conf["serial"] # ok = None
-        self.chipid = conf["chipid"] if conf["chipid"] else 0x10
+        self.chipid = conf["chip_id"] if conf["chip_id"] else 0x10
         self.plane  = conf["plane"]
         self.strblen = None
         self.rdomode = None
-        self.triggermode = conf["triggermode"]
+        self.triggermode = conf["trigger_mode"]
 
         self._daqboard = ALPIDEDAQBoard(self.serial)
         self._lock = threading.Lock()
@@ -52,7 +52,7 @@ class AltaiDaqBoard:
             self._daqboard.xonxoff.rst.issue()
 
             # ...or the ALPIDE...
-            self._daqboard.alpide_cmd_issue(0xD2)  # GRST
+            self._daqboard.alpide_cmd_issue(AltaiCmd.GRST)
 
             # now for monitoring, also start clean
             self._clear_monitors()
@@ -63,35 +63,73 @@ class AltaiDaqBoard:
 
     def configure(self, conf: dict) -> None:
         with self._lock:
-            if "VCASN" in conf:
-                self._daqboard.alpide_reg_write(0x604, int(conf["VCASN"]), chipid=self.chipid)
-            if "VCASN2" in conf:
-                self._daqboard.alpide_reg_write(0x607, int(conf["VCASN2"]), chipid=self.chipid)
-            if "ITHR" in conf:
-                self._daqboard.alpide_reg_write(0x60E, int(conf["ITHR"]), chipid=self.chipid)
-            if "VCLIP" in conf:
-                self._daqboard.alpide_reg_write(0x608, int(conf["VCLIP"]), chipid=self.chipid)
-            if "IDB" in conf:
-                self._daqboard.alpide_reg_write(0x60C, int(conf["IDB"]), chipid=self.chipid)
-            self._daqboard.alpide_reg_write(0x602, int(conf["VRESETD"]), chipid=self.chipid)
+            if "vcasn" in conf:
+                self._daqboard.alpide_reg_write(
+                    AltaiReg.VCASN,
+                    int(conf["vcasn"]),
+                    chipid=self.chipid
+                )
+            if "vcasn2" in conf:
+                self._daqboard.alpide_reg_write(
+                    AltaiReg.VCASN2,
+                    int(conf["vcasn2"]),
+                    chipid=self.chipid
+                )
+            if "ithr" in conf:
+                self._daqboard.alpide_reg_write(
+                    AltaiReg.ITHR,
+                    int(conf["ithr"]),
+                    chipid=self.chipid
+                )
+            if "vclip" in conf:
+                self._daqboard.alpide_reg_write(
+                    AltaiReg.VCLIP,
+                    int(conf["vclip"]),
+                    chipid=self.chipid
+                )
+            if "idb" in conf:
+                self._daqboard.alpide_reg_write(
+                    AltaiReg.IDB,
+                    int(conf["idb"]),
+                    chipid=self.chipid
+                )
 
-            self.chipid = int(conf["CHIPID"])
-
-            self.strblen = int(conf["STROBE_LENGTH"])
-            self.rdomode = conf["RDOMODE"]
-
-            self._daqboard.alpide_cmd_issue(0xE4)  # PRST
             self._daqboard.alpide_reg_write(
-                0x0004, 0x0060, chipid=self.chipid
+                AltaiReg.VRESETD,
+                int(conf["vresetd"]),
+                chipid=self.chipid
+            )
+
+            self.chipid = int(conf["chip_id"])
+
+            self.strblen = int(conf["strobe_length"])
+            self.rdomode = conf["rdo_mode"]
+
+            self._daqboard.alpide_cmd_issue(AltaiCmd.PRST)
+            self._daqboard.alpide_reg_write(
+                AltaiReg.FROMU_CONF1,
+                0x0060,
+                chipid=self.chipid
             )  # disable busy monitoring, analog test pulse, enable test strobe
-            self._daqboard.alpide_reg_write(0x0005, self.strblen, chipid=self.chipid)  # strobe length
             self._daqboard.alpide_reg_write(
-                0x0010, 0x0030, chipid=self.chipid
+                AltaiReg.FROMU_CONF2,
+                self.strblen,
+                chipid=self.chipid
+                )
+            self._daqboard.alpide_reg_write(
+                AltaiReg.CMU_DUM_CONFIG,
+                0x0030,
+                chipid=self.chipid
             )  # initial token, SDR, disable manchester, previous token == self!!!
-            self._daqboard.alpide_cmd_issue(0x63)  # RORST (needed!!!)
+
+            self._daqboard.alpide_cmd_issue(AltaiCmd.RORST)  # (needed!!!)
 
             if self.rdomode == RdoMode.DCTRL:
-                self._daqboard.alpide_reg_write(0x0001, 0x020D, chipid=self.chipid)  # normal readout, TRG mode, CMU RDO
+                self._daqboard.alpide_reg_write(
+                    AltaiReg.MODE_CTRL,
+                    0x020D,
+                    chipid=self.chipid
+                    )  # normal readout, TRG mode, CMU RDO
                 self._daqboard.rdoctrl.delay_set.write(
                     2 * self.strblen + 100
                 )  # when to start reading (@80MHz, i.e. at least strobe-time x2 + sth.) ... TODO
@@ -99,15 +137,19 @@ class AltaiDaqBoard:
                 self._daqboard.rdoctrl.ctrl.write(1)  # enable DCTRL RDO
                 self._daqboard.rdomux.ctrl.write(2)  # select DCTRL RDO
             elif self.rdomode == RdoMode.DATAPORT:
-                self._daqboard.alpide_reg_write(0x0001, 0x000D, chipid=self.chipid)  # normal readout, TRG mode
+                self._daqboard.alpide_reg_write(
+                    AltaiReg.MODE_CTRL,
+                    0x000D,
+                    chipid=self.chipid
+                    )  # normal readout, TRG mode
                 self._daqboard.rdopar.ctrl.write(1)  # enable parallel port RDO
                 self._daqboard.rdomux.ctrl.write(1)  # select parallel port RDO
                 self._daqboard.xonxoff.ctrl.write(1)  # enable XON XOFF
             else:
-                raise ValueError('RDOMODE "%s" not understood' % self.rdomode)
+                raise ValueError('rdo_mode "%s" not understood' % self.rdomode)
 
-            self._daqboard.trg.minspacing.write(int(conf["minspacing"]) if "minspacing" in conf else 0)
-            self._daqboard.trg.fixedbusy.write(int(conf["fixedbusy"]) if "fixedbusy" in conf else 0)
+            self._daqboard.trg.minspacing.write(int(conf["min_spacing"]))
+            self._daqboard.trg.fixedbusy.write(int(conf["fixed_busy"]))
 
     def stop_trigger(self) -> None:
         with self._lock:
@@ -135,25 +177,28 @@ class AltaiDaqBoard:
     def get_power_status(self) -> tuple[float, float, bool]:
         with self._lock:
             idda, iddd, status = self._daqboard.power_status()
+
         return idda, iddd, status
 
     def get_carrier_temp(self) -> float | None:
         with self._lock:
             temp = self._daqboard.carrier_temp()
+
         return temp
 
     def dump_registers(self) -> dict:
         with self._lock:
-            return {"ALPIDE_%04x_%s" % (addr,name): "%d" % self.daq.alpide_reg_read(addr,chipid=self.chipid) for name, addr in dump_addresses().items()}
+            return {"ALPIDE_%04x_%s" % (addr,name): self.daq.alpide_reg_read(addr,chipid=self.chipid) for name, addr in dump_addresses().items()}
 
-    def get_info4bor(self) -> dict:
-        fpga_git = self._daqboard.get_fpga_git()
-        fpga_compile = self._daqboard.get_fpga_tcompile()
-        alpidedaq_git = self._daqboard.get_software_git()
-        alpidedaq_diff = self._daqboard.get_software_diff()
+    def get_firmware_info(self) -> dict:
+        with self._lock():
+            fpga_git = self._daqboard.get_fpga_git()
+            fpga_compile = self._daqboard.get_fpga_tcompile()
+            alpidedaq_git = self._daqboard.get_software_git()
+            alpidedaq_diff = self._daqboard.get_software_diff()
 
         return {"FPGA_FIT": fpga_git, 
-                "FPGA_COMPILE": fpga_compile,
+                "FPGA_COMPILE": fpga_compile.iso_format(),
                 "ALPIDEDAQ_GIT": alpidedaq_git,
                 "ALPIDEDAQ_DIFF": alpidedaq_diff}
 
