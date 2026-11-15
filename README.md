@@ -8,7 +8,21 @@ language: "Python"
 parent_class: "TransmitterSatellite"
 ---
 
+<<<<<<< HEAD
 ## 📌 Description
+=======
+## First Steps
+
+Place `alpide-daq-software` at the same level of directory.
+
+```shell
+uv venv
+source .venv/bin/activate
+uv sync --extra alpidedaqboard
+```
+
+## Description
+>>>>>>> b84c27bf092213cccce7c9051d45a8cf0ce9100a
 
 This is a detailed description of the satellite and its functionality.
 Possible dependencies are described alongside its features, potential pitfalls and other information.
