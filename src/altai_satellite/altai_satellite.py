@@ -2,13 +2,13 @@
 SPDX-FileCopyrightText: 2025 DESY and the Constellation authors
 SPDX-License-Identifier: EUPL-1.2
 """
+from . import __version__
 
 from constellation.core.transmitter_satellite import TransmitterSatellite
 from constellation.core.configuration import Configuration, enum_type
 from constellation.core.monitoring import schedule_metric
 from constellation.core.protocol.cscp1 import SatelliteState
 
-from . import __version__
 from .daq import AltaiDaqBoard, TriggerMode, RdoMode
 
 class Altai(TransmitterSatellite, version=__version__):
@@ -70,7 +70,7 @@ class Altai(TransmitterSatellite, version=__version__):
         self.daq.stop_trigger()
 
         while self._read_and_send_event():
-            self.log.info("Reading remining events...")
+            self.log.info("Reading remaining events...")
 
         self.eor = (
             self.daq.dump_registers() |

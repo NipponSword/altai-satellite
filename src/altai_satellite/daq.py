@@ -6,9 +6,10 @@ SPDX-License-Identifier: EUPL-1.2
 # pyright: reportAttributeAccessIssue=false
 
 import threading
-from alpidedaqboard import ALPIDEDAQBoard
 from enum import StrEnum
+
 from .registers import AltaiReg, AltaiCmd, dump_addresses
+from alpidedaqboard import ALPIDEDAQBoard
 
 class TriggerMode(StrEnum):
     PRIMARY = "primary"

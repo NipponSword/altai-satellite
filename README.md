@@ -10,7 +10,7 @@ parent_class: "Satellite"
 
 ## First Steps
 
-Place `alpide-daq-software` at the same lavel of directory.
+Place `alpide-daq-software` at the same level of directory.
 
 ```shell
 uv venv
