@@ -46,7 +46,7 @@ class Altai(TransmitterSatellite, version=__version__):
     def do_starting(self, run_identifer: str) -> str:
 
         self.bor = (
-            {"eudaq_event": "ALPIDE"} |
+            {"eudaq_event": f"ALPIDE_plane_{self.daq.plane}"} |
             {"write_as_blocks": True} |
             self.daq.get_firmware_info() |
             self.daq.dump_registers() |
