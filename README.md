@@ -31,8 +31,6 @@ Create virtual environment
 ```shell
 git clone git@github.com:NipponSword/altai-satellite.git
 cd altai-satellite
-uv venv --python 3.12
-source .venv/bin/activate
 ```
 Then install satellite with `alpide-daq-software`
 ```shell
