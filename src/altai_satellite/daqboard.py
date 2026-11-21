@@ -14,15 +14,24 @@ from .registers import AltaiCmd, AltaiReg, dump_addresses
 
 
 class TriggerMode(StrEnum):
+    """Trigger mode configuration
+    """
     PRIMARY = "primary"
     REPLICA = "replica"
 
 class RdoMode(StrEnum):
+    """Readout mode configuration
+    """
     DCTRL = "dctrl"
     DATAPORT = "dataport"
 
 class AltaiDaqBoard:
-    def __init__(self, conf) -> None:
+    def __init__(self, conf: dict) -> None:
+        """ini
+
+        Args:
+            conf (dict): dict configuration
+        """
         self.serial = conf["serial"]
         self.chipid = conf["chip_id"]
         self.plane  = conf["plane"]
@@ -30,18 +39,30 @@ class AltaiDaqBoard:
         self.rdomode = None
         self.triggermode = conf["trigger_mode"]
 
-        self._daqboard = ALPIDEDAQBoard(self.serial)
+        self._daqboard = ALPIDEDAQBoard(self.serial, verbose=False)
         self._lock = threading.Lock()
 
+    def close(self) -> None:
+        """close USB handle
+        """
+        with self._lock:
+            self._daqboard.dispose()
+
     def power_on(self) -> None:
+        """ALTAI power on
+        """
         with self._lock:
             self._daqboard.power_on()
 
     def power_off(self) -> None:
+        """ALTAI power off
+        """
         with self._lock:
             self._daqboard.power_off()
 
     def reset(self) -> None:
+        """reset settings
+        """
         with self._lock:
             # just in case we got up on the wrong side of the fw...
             self._daqboard.trg.opcode.write(0x55)
@@ -61,10 +82,20 @@ class AltaiDaqBoard:
             self._clear_monitors()
 
     def _clear_monitors(self) -> None:
+        """reset monitor
+        """
         self._daqboard.rdopar.clr.issue()
         self._daqboard.trgmon.clr.issue()
 
     def configure(self, conf: dict) -> None:
+        """lets configure
+
+        Args:
+            conf (dict): configuration
+
+        Raises:
+            ValueError: incorrect settings
+        """
         with self._lock:
             self._daqboard.alpide_reg_write(
                 AltaiReg.VCASN,
@@ -147,6 +178,8 @@ class AltaiDaqBoard:
             self._daqboard.trg.fixedbusy.write(int(conf["fixed_busy"]))
 
     def stop_trigger(self) -> None:
+        """ stop trigger rcv
+        """
         with self._lock:
             if self.triggermode == TriggerMode.PRIMARY:
                 self._daqboard.trg.ctrl.write(0b1001)  # primary mode, no maskig of external trigger or busy, force busy
@@ -156,6 +189,8 @@ class AltaiDaqBoard:
                 self._daqboard.trg.ctrl.write(0b0001)  # replica mode, no masking, force busy
         
     def arm_trigger(self) -> None:
+        """start trigger
+        """
         with self._lock:
             if self.triggermode == TriggerMode.PRIMARY:
                 # primary mode, no maskig of external trigger or busy, no forced busy (anymore)
@@ -178,6 +213,9 @@ class AltaiDaqBoard:
 
         return idda, iddd, status
 
+    def is_powered(self) -> bool:
+        return self.get_power_status()[2]
+
     def get_carrier_temp(self) -> float | None:
         with self._lock:
             temp = self._daqboard.carrier_temp()
@@ -195,15 +233,21 @@ class AltaiDaqBoard:
 
     def get_firmware_info(self) -> dict:
         with self._lock:
-            fpga_git = self._daqboard.get_fpga_git()
-            fpga_compile = self._daqboard.get_fpga_tcompile()
-            alpidedaq_git = self._daqboard.get_software_git()
-            alpidedaq_diff = self._daqboard.get_software_diff()
+            info = {
+                "FPGA_GIT": self._daqboard.get_fpga_git(),
+                "FPGA_COMPILE": self._daqboard.get_fpga_tcompile()
+            }
 
-        return {"FPGA_GIT": fpga_git, 
-                "FPGA_COMPILE": fpga_compile.isoformat(),
-                "ALPIDEDAQ_GIT": alpidedaq_git,
-                "ALPIDEDAQ_DIFF": alpidedaq_diff}
+            def _as_text(value: bytes | str) -> str:
+                return value.decode(errors="replace") if isinstance(value, bytes) else value
+
+            try:
+                info["ALPIDEDAQ_GIT"] = _as_text(self._daqboard.get_software_git())
+                info["ALPIDEDAQ_DIFF"] = _as_text(self._daqboard.get_software_diff())
+            except OSError:
+                info["ALPIDEDAQ_GIT"] = "unknown"
+        
+        return info
 
     def read_trigger_monitor(self) -> dict[str, int]:
         """Latch and read the firmware trigger-monitor counters."""
