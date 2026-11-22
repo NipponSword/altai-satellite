@@ -64,7 +64,6 @@ class AltaiDaqBoard:
         """reset settings
         """
         with self._lock:
-            # just in case we got up on the wrong side of the fw...
             self._daqboard.trg.opcode.write(0x55)
             self._daqboard.rdoctrl.rst.issue()
             self._daqboard.rdopar.rst.issue()
@@ -202,27 +201,52 @@ class AltaiDaqBoard:
                 self._daqboard.trg.ctrl.write(0b0000)  # replica mode, no masking, no forced busy (anymore)
     
     def read_event(self) -> bytes | None:
+        """read a ALTAI hit event
+
+        Returns:
+            bytes | None: raw data
+        """
         with self._lock:
             raw =  self._daqboard.event_read()
 
         return bytes(raw) if raw else None
     
     def get_power_status(self) -> tuple[float, float, bool]:
+        """read register and get power status
+
+        Returns:
+            tuple[float, float, bool]: value of idda, iddd, status
+        """
         with self._lock:
             idda, iddd, status = self._daqboard.power_status()
 
         return idda, iddd, status
 
     def is_powered(self) -> bool:
+        """check if ALTAI is not latched up
+
+        Returns:
+            bool: if False, ALTAI powered off
+        """
         return self.get_power_status()[2]
 
     def get_carrier_temp(self) -> float | None:
+        """read register and get temperature
+
+        Returns:
+            float | None: value of temparature
+        """
         with self._lock:
             temp = self._daqboard.carrier_temp()
 
         return temp
 
     def dump_registers(self) -> dict:
+        """dump current registers to dictionary
+
+        Returns:
+            dict: register values
+        """
         with self._lock:
             return {
                 f"ALPIDE_{addr:04x}_{name}": self._daqboard.alpide_reg_read(
@@ -232,15 +256,16 @@ class AltaiDaqBoard:
             }
 
     def get_firmware_info(self) -> dict:
+        """get firmware and software information
+
+        Returns:
+            dict: value of git and compile information
+        """
         with self._lock:
             info = {
                 "FPGA_GIT": self._daqboard.get_fpga_git(),
-                "FPGA_COMPILE": self._daqboard.get_fpga_tcompile()
+                "FPGA_COMPILE": self._daqboard.get_fpga_tcompile().isoformat()
             }
-
-            def _as_text(value: bytes | str) -> str:
-                return value.decode(errors="replace") if isinstance(value, bytes) else value
-
             try:
                 info["ALPIDEDAQ_GIT"] = _as_text(self._daqboard.get_software_git())
                 info["ALPIDEDAQ_DIFF"] = _as_text(self._daqboard.get_software_diff())
@@ -250,7 +275,13 @@ class AltaiDaqBoard:
         return info
 
     def read_trigger_monitor(self) -> dict[str, int]:
-        """Latch and read the firmware trigger-monitor counters."""
+        """Latch and read the firmware trigger-monitor counters
+        """
         with self._lock:
             self._daqboard.trgmon.lat.issue()
             return {f"TRGMON_{name.upper()}": reg.read() for name, reg in self._daqboard.trgmon.regs.items()}
+
+# --- end module class 
+
+def _as_text(value: bytes | str) -> str:
+    return value.decode(errors="replace") if isinstance(value, bytes) else value

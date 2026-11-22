@@ -38,9 +38,6 @@ class Altai(TransmitterSatellite, version=__version__):
 
         Args:
             config (Configuration): toml configuration
-
-        Returns:
-            str: "Do initializing complete"
         """
         if hasattr(self, "daq"):
             self.daq.close()
@@ -55,9 +52,6 @@ class Altai(TransmitterSatellite, version=__version__):
 
         Raises:
             RuntimeError: ALTAI power did not come up
-
-        Returns:
-            str: "Do launching complete"
         """
         self.daq.stop_trigger()
         self.daq.power_on()
@@ -73,20 +67,14 @@ class Altai(TransmitterSatellite, version=__version__):
 
     def do_landing(self) -> str:
         """land, power off
-
-        Returns:
-           str: "Do landing complete"
         """
         self.daq.power_off()
+
         return "Do landing complete"
 
     def do_starting(self, run_identifer: str) -> str:
         """start, set bor
-
-        Returns:
-            str: "Do starting complete"
         """
-
         self.bor = (
             {"eudaq_event": f"ALPIDE_plane_{self.daq.plane}"} |
             {"write_as_blocks": True} |
@@ -104,14 +92,11 @@ class Altai(TransmitterSatellite, version=__version__):
 
         Raises:
             RuntimeError: ALTAI power latch-up
-
-        Returns:
-            str: "Do running complete"
         """
-        next_power_check = time.monotonic()
+        next_power_check = monotonic()
         while not self.stop_requested():
             self._read_and_send_event()
-            if monotonic() >= next_power_check():
+            if monotonic() >= next_power_check:
                 if not self.daq.is_powered():
                     raise RuntimeError("ALTAI power tripped during run")
                 next_power_check += POWER_CHECK_INTERVAL
@@ -120,11 +105,7 @@ class Altai(TransmitterSatellite, version=__version__):
 
     def do_stopping(self) -> str:
         """stop, read all data before power off
-
-        Returns:
-            str: "Do stopping complete"
-        """
-                
+        """        
         self.daq.stop_trigger()
 
         self.log.info("Reading remaining events...")
@@ -140,9 +121,6 @@ class Altai(TransmitterSatellite, version=__version__):
 
     def fail_gracefully(self) -> str:
         """gracefull stop
-
-        Returns:
-            str: "Trigger blocked, power off..."
         """
         if not hasattr(self, "daq"):
             return "Failed before board was opend"
